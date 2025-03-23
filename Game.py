@@ -193,8 +193,12 @@ player_stand = pygame.image.load('Assets/graphics/player/player_stand.png').conv
 player_stand = pygame.transform.rotozoom(player_stand, 0, 2)
 player_stand_rect = player_stand.get_rect(center=(400, 200))
 
-game_name = fonte.render('Alien Avoid - 3993463', False, (111, 196, 169))
-game_name_rect = game_name.get_rect(center=(400, 80))
+# --- Novas variáveis para o título em duas linhas ---
+game_title = fonte.render('ALIEN VOID', False, (111, 196, 169))
+game_title_rect = game_title.get_rect(center=(400, 60))
+game_info = fonte.render('RU: 3993463 - FRANCISCO SADI SANTOS PONTES', False, (111, 196, 169))
+game_info_rect = game_info.get_rect(center=(400, 110))
+
 start_message = fonte.render('Pressione espaco para jogar', False, (111, 196, 169))
 start_message_rect = start_message.get_rect(center=(400, 330))
 
@@ -256,7 +260,9 @@ def main():
             if not game_started:
                 # Tela de início: fundo azul petróleo escuro
                 screen.fill((0, 60, 80))
-                screen.blit(game_name, game_name_rect)
+                # Exibe o título em duas linhas
+                screen.blit(game_title, game_title_rect)
+                screen.blit(game_info, game_info_rect)
                 screen.blit(start_message, start_message_rect)
 
                 alpha_value = 128 + 127 * math.sin(pygame.time.get_ticks() / 500)
