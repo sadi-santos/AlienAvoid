@@ -6,14 +6,14 @@ import math
 from sys import exit
 from random import randint, choice
 
-# INITIALIZAÇÃO DO PYGAME E CONFIGURAÇÃO DO ÍCONE
+# INITIALIZAÇÃO
 pygame.init()
 icon = pygame.image.load("Assets/graphics/game_icon.png")
 pygame.display.set_icon(icon)
 screen = pygame.display.set_mode((800, 400))
 pygame.display.set_caption('3993463 - Alien Avoid - FRANCISCO SADI SANTOS PONTES')
 
-# --- CARREGAMENTO DE SONS ---
+# SONS
 bg_music = pygame.mixer.Sound('Assets/audio/music.mp3')
 bg_music.play(loops=-1)
 collision_sound = pygame.mixer.Sound('Assets/audio/squeaky-toy.mp3')
@@ -21,10 +21,7 @@ collision_sound.set_volume(0.7)
 pop_sound = pygame.mixer.Sound('Assets/audio/pop.wav')
 
 
-# --- FUNÇÃO AUXILIAR (mantida, embora não seja utilizada nesta versão) ---
 def blend_surfaces(surf1, surf2, blend):
-    """Retorna uma superfície resultante da interpolação entre surf1 e surf2.
-       blend: 0.0 -> 100% surf1; 1.0 -> 100% surf2."""
     temp1 = surf1.copy()
     temp2 = surf2.copy()
     temp1.set_alpha(int((1 - blend) * 255))
@@ -34,8 +31,6 @@ def blend_surfaces(surf1, surf2, blend):
     result.blit(temp2, (0, 0))
     return result
 
-
-# --- CLASSES ---
 
 class Jogador(pygame.sprite.Sprite):
     def __init__(self):
@@ -52,41 +47,67 @@ class Jogador(pygame.sprite.Sprite):
         self.image = self.walk_frames[self.walk_index]
         self.rect = self.image.get_rect(midbottom=(250, 300))
 
-        # Parâmetros de pulo
+        # Parâmetros de pulo e gravidade
         self.gravidade = 0.0
+        self.gravity_increment = 0.5
         self.jump_sound = pygame.mixer.Sound('Assets/audio/jump.mp3')
         self.jump_sound.set_volume(0.5)
-        self.gravity_increment = 0.5
 
-        # Impulsos: pulo simples e double jump (1,5x pulo simples)
+        # Impulsos: pulo simples e duplo
         self.simple_jump_impulse = -12
-        self.double_jump_impulse = -18
+        self.double_jump_impulse = -24  # Aumentado para garantir altura suficiente
 
-        # Controle de duplo pulo: só pode ser acionado com segundo toque de SPACE
+        # Controle do double jump: somente pelo segundo toque
         self.double_jump_available = True
         self.space_pressed_last = False
-        self.double_jump_timer = 0  # controla exibição do jump3_img
+        self.double_jump_timer = 0  # para exibir jump3_img brevemente
+
+        # Controle do hover: ativo somente após o double jump, com delay
+        self.hover_active = False
+        self.hover_delay_timer = 0  # Delay antes de ativar o hover (ex: 10 frames)
+        self.hover_timer = 0  # Duração máxima do hover (ex: 600 frames = 10 s)
+        self.hover_y = None
 
     def entrada(self):
         keys = pygame.key.get_pressed()
-        # Detecta transição: SPACE pressionado agora e não no frame anterior
         if keys[pygame.K_SPACE] and not self.space_pressed_last:
-            if self.rect.bottom >= 300:  # Se no chão: pulo simples
+            if self.rect.bottom >= 300:  # Pulo simples
                 self.gravidade = self.simple_jump_impulse
                 self.jump_sound.play()
                 self.double_jump_available = True
-            elif self.double_jump_available:  # Se no ar e double jump disponível: executa o double jump
+            elif self.double_jump_available:  # Double jump
                 self.gravidade = self.double_jump_impulse
-                self.double_jump_timer = 20  # Exibe jump3_img por ~0.33 s
+                self.double_jump_timer = 20  # exibe jump3_img por ~0.33 s
                 self.double_jump_available = False
+                # Inicia o delay para o hover; só se hover for desejado
+                self.hover_delay_timer = 10  # espera 10 frames antes de ativar hover
+                self.hover_y = self.rect.y
         self.space_pressed_last = keys[pygame.K_SPACE]
+        # Se a tecla não estiver pressionada, desativa hover e reset hover delay
+        if not keys[pygame.K_SPACE]:
+            self.hover_active = False
+            self.hover_delay_timer = 0
 
     def aplicar_gravidade(self):
-        self.gravidade += self.gravity_increment
-        self.rect.y += self.gravidade
-        if self.rect.bottom >= 300:
-            self.rect.bottom = 300
-            self.double_jump_available = True
+        # Se o delay terminou e a tecla SPACE ainda está pressionada, ativa hover
+        if self.hover_delay_timer > 0:
+            self.hover_delay_timer -= 1
+            if self.hover_delay_timer == 0 and pygame.key.get_pressed()[pygame.K_SPACE]:
+                self.hover_active = True
+                self.hover_timer = 50  # máximo 5 segundos de hover
+                self.hover_y = self.rect.y
+
+        if self.hover_active and self.hover_timer > 0:
+            self.hover_timer -= 1
+            self.rect.y = self.hover_y  # Mantém a altura
+            self.gravidade = 0
+        else:
+            self.gravidade += self.gravity_increment
+            self.rect.y += self.gravidade
+            if self.rect.bottom >= 300:
+                self.rect.bottom = 300
+                self.double_jump_available = True
+                self.hover_active = False
         if self.rect.top < 0:
             self.rect.top = 0
             self.gravidade = 0
@@ -107,7 +128,14 @@ class Jogador(pygame.sprite.Sprite):
             self.image = self.jump3_img
             self.double_jump_timer -= 1
         else:
-            self.animacao()
+            if not self.hover_active:
+                self.animacao()
+            else:
+                # Durante o hover, alterna a imagem entre jump2 e jump3 a cada 10 frames
+                if (pygame.time.get_ticks() // 100) % 2 == 0:
+                    self.image = self.jump2_img
+                else:
+                    self.image = self.jump3_img
 
 
 class Obstaculo(pygame.sprite.Sprite):
@@ -115,7 +143,6 @@ class Obstaculo(pygame.sprite.Sprite):
         super().__init__()
         self.tipo = tipo
         if tipo == 'flying_alien':
-            # Ajusta a altura dos fly para que fiquem logo acima do player
             fly1 = pygame.image.load('Assets/graphics/flying_alien/flying_alien1.png').convert_alpha()
             fly2 = pygame.image.load('Assets/graphics/flying_alien/flying_alien2.png').convert_alpha()
             self.frames = [fly1, fly2]
@@ -125,14 +152,13 @@ class Obstaculo(pygame.sprite.Sprite):
             flower2 = pygame.image.load('Assets/graphics/man_eater_flower/man_eater_flower2.png').convert_alpha()
             self.frames = [flower1, flower2]
             y_pos = 300
-        else:  # ground_alien (snail)
+        else:
             alien1 = pygame.image.load('Assets/graphics/ground_alien/ground_alien1.png').convert_alpha()
             alien2 = pygame.image.load('Assets/graphics/ground_alien/ground_alien2.png').convert_alpha()
             self.frames = [alien1, alien2]
             y_pos = 300
         self.anim_index = 0
         self.image = self.frames[self.anim_index]
-        # Posicionamento horizontal aleatório entre 900 e 1300
         self.rect = self.image.get_rect(midbottom=(randint(900, 1300), y_pos))
         self.pontuado = False
 
@@ -159,7 +185,6 @@ class Obstaculo(pygame.sprite.Sprite):
 def colisao():
     collisions = pygame.sprite.spritecollide(jogador.sprite, obstaculos, False)
     for obs in collisions:
-        # Define threshold: 20 px para ground_alien e man_eater_flower; 10 para flying_alien
         threshold = 20 if obs.tipo in ['ground_alien', 'man_eater_flower'] else 10
         if jogador.sprite.gravidade >= 0 and jogador.sprite.rect.bottom <= obs.rect.top + threshold:
             obs.kill()
@@ -171,7 +196,7 @@ def colisao():
                 pontuacao += 1
                 obs.pontuado = True
         else:
-            return False  # Colisão frontal = game over
+            return False
     return True
 
 
@@ -182,7 +207,6 @@ def mostrar_pontuacao():
 
 
 def mostrar_nivel2():
-    # Exibe "NÍVEL 2" no topo da tela (y = 50)
     lvl2_txt = fonte_grande.render("NÍVEL 2", True, (255, 255, 255))
     lvl2_rect = lvl2_txt.get_rect(center=(400, 50))
     screen.blit(lvl2_txt, lvl2_rect)
@@ -191,8 +215,8 @@ def mostrar_nivel2():
 def efeito_colisao():
     global bg_x_pos, ground_x_pos
     collision_sound.play()
-    blink_dur = 1000  # ms
-    blink_int = 100  # ms
+    blink_dur = 1000
+    blink_int = 100
     start_time = pygame.time.get_ticks()
     while pygame.time.get_ticks() - start_time < blink_dur:
         for e in pygame.event.get():
@@ -259,7 +283,6 @@ bg_x_pos = 0
 ground_x_pos = 0
 scroll_speed = 1
 
-# Definindo LEVEL_THRESHOLD para mudança de fundo
 LEVEL_THRESHOLD = 15
 
 level2_pause = False
